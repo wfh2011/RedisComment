@@ -262,6 +262,12 @@ int aeDeleteTimeEvent(aeEventLoop *eventLoop, long long id)
  *    Much better but still insertion or deletion of timers is O(N).
  * 2) Use a skiplist to have this operation as O(1) and insertion as O(log(N)).
  */
+/*
+ * 1. 找到最早的时间事件的任务
+ * 2. 找到当前与最早的任务事件差别
+ * 3. 当前时间 > 最早的任务时间，说明应该执行但未执行，返回0
+ * 4. 当前时间 < 最早的任务时间，说明未来要执行，返回(最早任务时间 - 当前时间)
+ * */
 static int64_t usUntilEarliestTimer(aeEventLoop *eventLoop) {
     aeTimeEvent *te = eventLoop->timeEventHead;
     if (te == NULL) return -1;
@@ -511,6 +517,12 @@ int aeWait(int fd, int mask, long long milliseconds) {
     }
 }
 
+/* 事件循环
+ * 1. 文件事件
+ * 2. 时间事件
+ * 3. sleep之前调用
+ * 4. sleep之后调用
+ * */
 void aeMain(aeEventLoop *eventLoop) {
     eventLoop->stop = 0;
     while (!eventLoop->stop) {

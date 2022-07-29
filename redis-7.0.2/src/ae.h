@@ -46,7 +46,14 @@
                            loop iteration. Useful when you want to persist
                            things to disk before sending replies, and want
                            to do that in a group fashion. */
-
+/*
+ * 00001 => 文件事件
+ * 00010 => 时间事件
+ * 00011 => 文件事件 | 时间事件
+ * 00100 => 不等待
+ * 01000 => sleep之前调用
+ * 10000 => sleep之后调用
+ * */
 #define AE_FILE_EVENTS (1<<0)
 #define AE_TIME_EVENTS (1<<1)
 #define AE_ALL_EVENTS (AE_FILE_EVENTS|AE_TIME_EVENTS)

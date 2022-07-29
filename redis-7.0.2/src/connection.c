@@ -163,6 +163,8 @@ static void connSocketClose(connection *conn) {
     zfree(conn);
 }
 
+/* socket写数据
+ * */
 static int connSocketWrite(connection *conn, const void *data, size_t data_len) {
     int ret = write(conn->fd, data, data_len);
     if (ret < 0 && errno != EAGAIN) {
@@ -178,6 +180,8 @@ static int connSocketWrite(connection *conn, const void *data, size_t data_len) 
     return ret;
 }
 
+/* 写数据，writev将多个数据存储在一起，将驻留在两个或更多的不连接的缓冲区中的数据一次写出去
+ * */
 static int connSocketWritev(connection *conn, const struct iovec *iov, int iovcnt) {
     int ret = writev(conn->fd, iov, iovcnt);
     if (ret < 0 && errno != EAGAIN) {
@@ -193,6 +197,8 @@ static int connSocketWritev(connection *conn, const struct iovec *iov, int iovcn
     return ret;
 }
 
+/* socket读数据
+ * */
 static int connSocketRead(connection *conn, void *buf, size_t buf_len) {
     int ret = read(conn->fd, buf, buf_len);
     if (!ret) {
@@ -210,6 +216,8 @@ static int connSocketRead(connection *conn, void *buf, size_t buf_len) {
     return ret;
 }
 
+/* accept，并执行回调函数
+ * */
 static int connSocketAccept(connection *conn, ConnectionCallbackFunc accept_handler) {
     int ret = C_OK;
 
