@@ -39,8 +39,11 @@
 #include "sds.h"
 #include "sdsalloc.h"
 
+/* 一个sds对象，如果初始化的指针为SDS_NOINIT, 则表示不需要初始化内存(memcpy) */
 const char *SDS_NOINIT = "SDS_NOINIT";
 
+/* 基于type获取hdr的大小
+ * */
 static inline int sdsHdrSize(char type) {
     switch(type&SDS_TYPE_MASK) {
         case SDS_TYPE_5:
@@ -57,6 +60,7 @@ static inline int sdsHdrSize(char type) {
     return 0;
 }
 
+/* 根据字符串长度来选取sdshdr的类型 */
 static inline char sdsReqType(size_t string_size) {
     if (string_size < 1<<5)
         return SDS_TYPE_5;
@@ -73,6 +77,8 @@ static inline char sdsReqType(size_t string_size) {
 #endif
 }
 
+/* 基于sdshdr类型来返回此种hdr能够管理的最大字符串长度
+ * */
 static inline size_t sdsTypeMaxSize(char type) {
     if (type == SDS_TYPE_5)
         return (1<<5) - 1;
@@ -115,7 +121,7 @@ static inline size_t sdsTypeMaxSize(char type) {
  * 6. 补上\0
  *
  * 备注:
- * 1. 实际上，本函数需要充分理解sds的内存结构，无复杂嗲业务流程
+ * 1. 实际上，本函数需要充分理解sds的内存结构，无复杂的业务流程
  **/
 sds _sdsnewlen(const void *init, size_t initlen, int trymalloc) {
     void *sh;
@@ -259,6 +265,19 @@ void sdsclear(sds s) {
  *
  * Note: this does not change the *length* of the sds string as returned
  * by sdslen(), but only the free buffer space we have. */
+/*
+ * 为sds扩大预分配空间
+ * 空间足够
+ * 1. 空用空间大于需要增加的空间，无需处理，直接返回
+ *
+ * 空间不够
+ * 1. 找到原先的malloc位置，即地址指向旧的hdr首地址
+ * 2. 如果开启贪婪模式: 如果最终的字符串长度 < 1MB, 申请的内存大小为 最终字符串长度 * 2；最终字符串长度 >= 1MB, 申请的内存大小为 最终字符串长度 + 1MB
+ * 3. 如果关闭贪婪模式: 申请的字符串长度即为最终字符串长度
+ * 4. 基于申请的内存大小，确定sdshdr的类型
+ * 5. sdshdr类型未发生变更，realloc内存，则修改sdshdr的alloc并返回即可，因为realloc自动memcpy
+ * 6. sdshdr类型发生变更，malloc新内存，需要手动复制旧的内存数据，释放旧内存，调整sdshdr内容，最终返回
+ * */
 sds _sdsMakeRoomFor(sds s, size_t addlen, int greedy) {
     void *sh, *newsh;
     size_t avail = sdsavail(s);
@@ -329,6 +348,14 @@ sds sdsMakeRoomForNonGreedy(sds s, size_t addlen) {
  *
  * After the call, the passed sds string is no longer valid and all the
  * references must be substituted with the new pointer returned by the call. */
+/* 消除sds多余的预分配的空间
+ * 1. 获取当前的sdshdr类型、字符串实际长度
+ * 2. 基于字符串实际长度获取新的sdshdr类型
+ * 3. 如果sdshdr未发生变更，则使用realloc，尽量减少内存拷贝
+ * 4. 如果新的sdshdr类型是sdshdr16~sdshdr64，则说明字符串长度很大，保留原先使用的sdshdr类型，使用realloc
+ * 5. 非以上条件，根据新的类型、实际字符串长度来手动malloc并内存拷贝
+ * 6. 最后，更新sdshdr
+ * */
 sds sdsRemoveFreeSpace(sds s) {
     void *sh, *newsh;
     char type, oldtype = s[-1] & SDS_TYPE_MASK;
@@ -516,6 +543,12 @@ sds sdsgrowzero(sds s, size_t len) {
  *
  * After the call, the passed sds string is no longer valid and all the
  * references must be substituted with the new pointer returned by the call. */
+/* 在sds s的字符串后追加长度为len的字符串
+ * 这是动态扩展sds的典型案例
+ * 1. 扩容，如果预分配空间足够，则不需要扩容(细节参考sdsMakeRoomFor)
+ * 2. 内存拷贝，追加到原来数据后面(因为可能发生过realloc，原先的字符串位置已经发生变更)
+ * 3. sds头的信息变更
+ * */
 sds sdscatlen(sds s, const void *t, size_t len) {
     size_t curlen = sdslen(s);
 
