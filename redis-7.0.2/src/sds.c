@@ -100,6 +100,23 @@ static inline size_t sdsTypeMaxSize(char type) {
  * You can print the string with printf() as there is an implicit \0 at the
  * end of the string. However the string is binary safe and can contain
  * \0 characters in the middle, as the length is stored in the sds header. */
+/*
+ * 构建一个sds字符串
+ * 1. 这是一个基础函数，即其他接口在本函数的基础之上进行封装
+ * 2. init和initlen表示一个任意格式的数据(并不一定是以\0结尾的数据)，分别表示数据的起始位置和长度
+ * 3. trymalloc表示malloc的时候使用的是ztrymalloc_usable还是zmalloc_usable
+ *
+ * 大致流程如下:
+ * 1. 根据initlen进行评估使用哪种sdshdrX
+ * 2. 申请内存，内存长度为sdshdrX+initlen+1,1表示\0
+ * 3. 如果init为SDS_NOINIT, 则malloc出来的内存不需要memzero
+ * 4. sdhdrX初始化
+ * 5. 如果init != NULL && init != SDS_NOINIT && initlen >0, 需要将init的内存拷贝到sds的字符串区域
+ * 6. 补上\0
+ *
+ * 备注:
+ * 1. 实际上，本函数需要充分理解sds的内存结构，无复杂嗲业务流程
+ **/
 sds _sdsnewlen(const void *init, size_t initlen, int trymalloc) {
     void *sh;
     sds s;
@@ -191,6 +208,12 @@ sds sdsdup(const sds s) {
 }
 
 /* Free an sds string. No operation is performed if 's' is NULL. */
+/*
+ * 释放sds的内存
+ * 1. 释放内存得找到最先malloc/realloc的地址
+ * 2. 由于sds内存分配的时候是hdr + data,进行一次性分配
+ * 3. 必须通过sds(data的地址)找到sdshdr的地址，在使用free函数
+ * */
 void sdsfree(sds s) {
     if (s == NULL) return;
     s_free((char*)s-sdsHdrSize(s[-1]));

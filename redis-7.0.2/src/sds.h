@@ -40,6 +40,20 @@ extern const char *SDS_NOINIT;
 #include <stdarg.h>
 #include <stdint.h>
 
+/* sds
+ * 1. sds由元数据+字符串数据构成
+ * 2. sds类型表明是字符串数据的首地址
+ * 3. 整个sds的内存(元数据+字符串数据)在一次malloc/realloc当中
+ * 4. sds的元数据所占据的长度是不确定的，取决于字符串数据的长度，因为元数据中描述字符串长度的字段类型不一样
+ * 5. sdshdrX类型必须是非对齐(__packed__)，因为如果对齐就不能准确找到sdshdrX的flags字段
+ * 6. sds的hdr分为两类: sdshdr5和sdshdr8/sdshdr16/sdshdr32/sdshdr64,sdshdr5实际上是没有真实使用的后面讲解sdshdr8~sdshdr64
+ * 7. sdshdrX采用非对齐(__packed__)原因: 倒退1B，即能找到flags字段
+ * 8. sdshdrX的X表示的是描述字符串长度的类型所占据的位数(1B 2B 4B 8B)
+ * 9. flags分为两部分: type(低3位)和未使用字段(高5位)
+ * 10. sdshdr5的flags: type(低3位)和字符串长度(高5位)
+ * 11. sdshdrX的len: 已分配内存的使用长度(字符串的真实长度)，alloc(预分配长度)
+ * 12. buf字段比较特殊，不占据内存空间，实际上指的是数据区的地址
+ * */
 typedef char *sds;
 
 /* Note: sdshdr5 is never used, we just access the flags byte directly.
@@ -84,6 +98,12 @@ struct __attribute__ ((__packed__)) sdshdr64 {
 #define SDS_HDR(T,s) ((struct sdshdr##T *)((s)-(sizeof(struct sdshdr##T))))
 #define SDS_TYPE_5_LEN(f) ((f)>>SDS_TYPE_BITS)
 
+/* 获取sds字符串的长度
+ * 1. 指针倒退1B，找到flags数据
+ * 2. flags数据的低3位表示的sdshdr的类型
+ * 3. 并根据类型，通过指针获取len字段的值
+ * 4. sdshdr5作为特殊的信息，找到flags的高8位即可
+ * */
 static inline size_t sdslen(const sds s) {
     unsigned char flags = s[-1];
     switch(flags&SDS_TYPE_MASK) {
@@ -101,6 +121,13 @@ static inline size_t sdslen(const sds s) {
     return 0;
 }
 
+/* 获取sds预分配的可用长度
+ * 1. 指针倒退1B，找到flags数据
+ * 2. flags数据的低3位表示的sdshdr的类型
+ * 3. 并根据类型，通过指针获取len字段的值
+ * 4. sdshdr5作为特殊的信息，没有可用长度，直接返回0
+ * 5. 获取hdr的alloc和len字段，相减即可
+ * */
 static inline size_t sdsavail(const sds s) {
     unsigned char flags = s[-1];
     switch(flags&SDS_TYPE_MASK) {
@@ -127,6 +154,11 @@ static inline size_t sdsavail(const sds s) {
     return 0;
 }
 
+/* 设置sds头的长度
+ * 1. 指针倒退1B，找到flags数据
+ * 2. flags数据的低3位表示的sdshdr的类型
+ * 3. 根据hdr设置len值
+ * */
 static inline void sdssetlen(sds s, size_t newlen) {
     unsigned char flags = s[-1];
     switch(flags&SDS_TYPE_MASK) {
@@ -151,6 +183,11 @@ static inline void sdssetlen(sds s, size_t newlen) {
     }
 }
 
+/* 增加sds头的长度
+ * 1. 指针倒退1B，找到flags数据
+ * 2. flags数据的低3位表示的sdshdr的类型
+ * 3. 根据hdr设置len值
+ * */
 static inline void sdsinclen(sds s, size_t inc) {
     unsigned char flags = s[-1];
     switch(flags&SDS_TYPE_MASK) {
